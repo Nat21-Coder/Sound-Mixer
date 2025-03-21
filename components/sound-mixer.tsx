@@ -651,7 +651,6 @@ export default function SoundMixer() {
               <Button
                 onClick={togglePlay}
                 size="lg"
-                className="bg-primary hover:bg-primary/90 text-white"
                 disabled={!audioReady || !!audioError}
               >
                 {isPlaying ? (
@@ -728,7 +727,7 @@ export default function SoundMixer() {
                             {savedMixes.map((mix) => (
                               <div
                                 key={mix.id}
-                                className="flex items-center justify-between p-3 rounded-md border hover:bg-gray-50"
+                                className="flex items-center justify-between p-3 rounded-md border "
                               >
                                 <div>
                                   <h3 className="font-medium">{mix.name}</h3>
@@ -791,10 +790,10 @@ export default function SoundMixer() {
                           {presetMixes.map((mix) => (
                             <div
                               key={mix.id}
-                              className="flex items-center justify-between p-3 rounded-md border hover:bg-gray-50"
+                              className="flex items-center justify-between p-3 rounded-md border "
                             >
                               <div>
-                                <h3 className="font-medium">{mix.name}</h3>
+                                <h3 className="font-medium dark:text-white">{mix.name}</h3>
                                 <div className="flex flex-wrap gap-1 mt-1">
                                   {Object.entries(mix.activeSound)
                                     .filter(([_, isActive]) => isActive)
@@ -805,7 +804,7 @@ export default function SoundMixer() {
                                       return sound ? (
                                         <span
                                           key={name}
-                                          className="text-xs px-1.5 py-0.5 rounded-full bg-gray-100"
+                                          className="text-xs px-1.5 py-0.5 rounded-full dark:bg-gray-900"
                                         >
                                           <span className="mr-1">
                                             {sound.icon}
@@ -879,7 +878,7 @@ export default function SoundMixer() {
                           activeSound[sound.name] ? "default" : "outline"
                         }
                         className={`h-16 ${
-                          activeSound[sound.name] ? sound.color : ""
+                          activeSound[sound.name] ? "dark:bg-white bg-gray-900" : ""
                         }`}
                         onClick={() => toggleSound(sound)}
                         disabled={!audioReady || !!audioError}
@@ -928,7 +927,7 @@ export default function SoundMixer() {
                           activeSound[sound.name] ? "default" : "outline"
                         }
                         className={`h-16 ${
-                          activeSound[sound.name] ? sound.color : ""
+                          activeSound[sound.name] ? "dark:bg-white bg-gray-900" : ""
                         }`}
                         onClick={() => toggleSound(sound)}
                         disabled={!audioReady || !!audioError}
@@ -977,7 +976,7 @@ export default function SoundMixer() {
                           activeSound[sound.name] ? "default" : "outline"
                         }
                         className={`h-16 ${
-                          activeSound[sound.name] ? sound.color : ""
+                          activeSound[sound.name] ? "dark:bg-white bg-gray-900" : ""
                         }`}
                         onClick={() => toggleSound(sound)}
                         disabled={!audioReady || !!audioError}
@@ -1002,7 +1001,7 @@ export default function SoundMixer() {
                     return sound ? (
                       <span
                         key={name}
-                        className={`${sound.color} text-white px-3 py-1 rounded-full text-sm flex items-center`}
+                        className={`dark:bg-gray-600 bg-gray-900 text-white px-3 py-1 rounded-full text-sm flex items-center`}
                       >
                         <span className="mr-1">{sound.icon}</span> {name}
                       </span>
