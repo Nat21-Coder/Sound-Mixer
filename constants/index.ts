@@ -6,39 +6,43 @@ export const sounds: Sound[] = [
     type: "nature",
     icon: "🌧️",
     color: "bg-blue-500",
-    frequency: 1000, // Higher frequency for rain
+    frequency: 1000, 
   },
   {
     name: "Forest",
     type: "nature",
     icon: "🌲",
     color: "bg-green-600",
-    frequency: 800, // Medium frequency for forest
+    frequency: 800,
   },
   {
     name: "Ocean",
     type: "nature",
     icon: "🌊",
     color: "bg-blue-400",
-    frequency: 400, // Low frequency for ocean
+    frequency: 400,
+   
   },
   {
-    name: "White Noise",
+    name: "White",
     type: "noise",
     icon: "⚪",
     color: "bg-gray-300",
+   
   },
   {
-    name: "Pink Noise",
+    name: "Pink",
     type: "noise",
     icon: "🔘",
     color: "bg-pink-300",
+    
   },
   {
-    name: "Brown Noise",
+    name: "Brown",
     type: "noise",
     icon: "🟤",
     color: "bg-amber-700",
+   
   },
   {
     name: "Piano",
@@ -47,6 +51,7 @@ export const sounds: Sound[] = [
     color: "bg-indigo-500",
     frequency: 440, // A4
     waveType: "sine",
+    
   },
   {
     name: "Ambient",
@@ -55,6 +60,7 @@ export const sounds: Sound[] = [
     color: "bg-purple-500",
     frequency: 220, // A3
     waveType: "sine",
+   
   },
   {
     name: "Lo-Fi",
@@ -63,6 +69,7 @@ export const sounds: Sound[] = [
     color: "bg-teal-500",
     frequency: 330, // E4
     waveType: "triangle",
+   
   },
 ]
 
@@ -125,3 +132,5 @@ export const presetMixes: SoundMix[] = [
     createdAt: Date.now(),
   },
 ]
+
+export const soundGroups = ["nature","noise","melody"]
