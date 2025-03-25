@@ -1,47 +1,20 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Volume2,
-  VolumeX,
-  Play,
-  Pause,
-  RefreshCw,
-  Save,
-  BookmarkPlus,
-  Trash2,
-  Check,
-  Loader,
-  LoaderCircle,
-} from "lucide-react";
-import { Input } from "@/components/ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Toaster } from "@/components/ui/toaster";
+import { Play, Pause, RefreshCw } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { useToast } from "@/hooks/use-toast";
 import { Sound, SoundMix } from "@/types";
-import { presetMixes, sounds } from "@/constants";
+import { soundGroups, sounds } from "@/constants";
+import SoundGroup from "@/components/sound-group";
+import LoadMixDialog from "@/components/load-mix-dialog";
+import SaveMixDialog from "@/components/save-mix-dialog";
+import LoaderSpinner from "@/components/loader-spinner";
+import DisplayCurrentPlayingSounds from "@/components/display-current-playing-sounds";
+import { toast } from "sonner";
 
 export default function SoundMixer() {
-  const { toast } = useToast();
   const [isPlaying, setIsPlaying] = useState(false);
   const [volumes, setVolumes] = useState({
     nature: 50,
@@ -49,12 +22,12 @@ export default function SoundMixer() {
     melody: 20,
   });
   const [activeSound, setActiveSound] = useState<Record<string, boolean>>({});
-  const [audioReady, setAudioReady] = useState(false);
+  const [audioReady, setAudioReady] = useState<boolean>(false);
   const [audioError, setAudioError] = useState<string | null>(null);
   const [savedMixes, setSavedMixes] = useState<SoundMix[]>([]);
-  const [newMixName, setNewMixName] = useState("");
-  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
-  const [loadDialogOpen, setLoadDialogOpen] = useState(false);
+  const [newMixName, setNewMixName] = useState<string>("");
+  const [saveDialogOpen, setSaveDialogOpen] = useState<boolean>(false);
+  const [loadDialogOpen, setLoadDialogOpen] = useState<boolean>(false);
 
   const audioContextRef = useRef<AudioContext | null>(null);
   const oscillatorsRef = useRef<Record<string, OscillatorNode | null>>({});
@@ -62,7 +35,6 @@ export default function SoundMixer() {
     {}
   );
   const gainNodesRef = useRef<Record<string, GainNode | null>>({});
-  const filtersRef = useRef<Record<string, BiquadFilterNode | null>>({});
 
   // Load saved mixes from localStorage
   useEffect(() => {
@@ -76,15 +48,10 @@ export default function SoundMixer() {
       }
     } catch (err) {
       console.error("Error loading saved mixes:", err);
-      toast({
-        title: "Error",
-        description: "Failed to load saved mixes",
-        variant: "destructive",
-      });
+      toast( "Failed to load saved mixes");
     }
   }, [toast]);
 
-  // Initialize Web Audio API
   useEffect(() => {
     try {
       // Create audio context
@@ -109,11 +76,7 @@ export default function SoundMixer() {
     } catch (err) {
       console.error("Audio initialization error:", err);
       setAudioError("Failed to initialize audio system");
-      toast({
-        title: "Error",
-        description: "Failed to initialize audio system",
-        variant: "destructive",
-      });
+      toast("Failed to initialize audio system");
     }
 
     return () => {
@@ -168,7 +131,7 @@ export default function SoundMixer() {
 
     // Create different sound generators based on type
     if (sound.type === "noise") {
-      createNoiseSound(sound.name, ctx, gainNode);
+      createNoiseSound(sound, ctx, gainNode);
     } else if (sound.type === "melody") {
       createMelodySound(sound, ctx, gainNode);
     } else if (sound.type === "nature") {
@@ -176,278 +139,159 @@ export default function SoundMixer() {
     }
   };
 
-  const createNoiseSound = (
-    type: string,
+  const createNoiseSound = async (
+    sound: Sound,
     ctx: AudioContext,
     gainNode: GainNode
   ) => {
     try {
-      // Create buffer for noise
-      const bufferSize = 2 * ctx.sampleRate;
-      const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-      const output = noiseBuffer.getChannelData(0);
-
-      // Fill buffer with noise
-      for (let i = 0; i < bufferSize; i++) {
-        if (type === "White Noise") {
-          output[i] = Math.random() * 2 - 1;
-        } else if (type === "Pink Noise") {
-          // Simple approximation of pink noise
-          output[i] = (Math.random() * 2 - 1) * 0.5;
-        } else if (type === "Brown Noise") {
-          // Simple approximation of brown noise
-          output[i] = Math.random() * 0.1;
-        }
-      }
-
-      // Create audio source from buffer
-      const noiseSource = ctx.createBufferSource();
-      noiseSource.buffer = noiseBuffer;
-      noiseSource.loop = true;
-
-      // Apply filter based on noise type
-      const filter = ctx.createBiquadFilter();
-
-      if (type === "Pink Noise") {
-        filter.type = "lowpass";
-        filter.frequency.value = 2000;
-      } else if (type === "Brown Noise") {
-        filter.type = "lowpass";
-        filter.frequency.value = 500;
-      } else {
-        filter.type = "highpass";
-        filter.frequency.value = 100;
-      }
-
-      noiseSource.connect(filter);
-      filter.connect(gainNode);
-
-      noiseSource.start();
-      noiseSourcesRef.current[type] = noiseSource;
-      filtersRef.current[type] = filter;
+      const response = await fetch(`/sounds/${sound.name.toLowerCase()}.wav`);
+      if (!response.ok) throw new Error("Failed to fetch sound file");
+      const arrayBuffer = await response.arrayBuffer();
+      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.loop = true;
+      source.connect(gainNode);
+      source.start();
+      noiseSourcesRef.current[sound.name] = source;
     } catch (err) {
       console.error("Error creating noise sound:", err);
-      toast({
-        title: "Error",
-        description: `Failed to create ${type} sound`,
-        variant: "destructive",
-      });
+      toast( `Failed to create ${sound.name} sound`);
     }
   };
 
-  const createMelodySound = (
+  const createMelodySound = async (
     sound: Sound,
     ctx: AudioContext,
     gainNode: GainNode
   ) => {
     try {
-      // Create oscillator for melody
-      const osc = ctx.createOscillator();
-
-      // Set waveform and frequency
-      osc.type = sound.waveType || "sine";
-      osc.frequency.value = sound.frequency || 440;
-
-      osc.connect(gainNode);
-      osc.start();
-
-      oscillatorsRef.current[sound.name] = osc;
+      let response;
+      if (sound.name === "Lo-Fi") {
+        response = await fetch(`/sounds/${sound.name.toLowerCase()}.flac`);
+      } else {
+        response = await fetch(`/sounds/${sound.name.toLowerCase()}.wav`);
+      }
+      if (!response || !response?.ok)
+        throw new Error("Failed to fetch sound file");
+      const arrayBuffer = await response.arrayBuffer();
+      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.loop = true;
+      source.connect(gainNode);
+      source.start();
+      noiseSourcesRef.current[sound.name] = source;
     } catch (err) {
       console.error("Error creating melody sound:", err);
-      toast({
-        title: "Error",
-        description: `Failed to create ${sound.name} sound`,
-        variant: "destructive",
-      });
+      toast(`Failed to create ${sound.name} sound`);
     }
   };
 
-  const createNatureSound = (
+  const createNatureSound = async (
     sound: Sound,
     ctx: AudioContext,
     gainNode: GainNode
   ) => {
     try {
-      // Create a noise source as the base for nature sounds
-      const bufferSize = 2 * ctx.sampleRate;
-      const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-      const output = noiseBuffer.getChannelData(0);
-
-      // Fill buffer with noise
-      for (let i = 0; i < bufferSize; i++) {
-        output[i] = Math.random() * 2 - 1;
+      let response;
+      if (sound.name === "Ocean") {
+        response = await fetch(`/sounds/${sound.name.toLowerCase()}.flac`);
+      } else {
+        response = await fetch(`/sounds/${sound.name.toLowerCase()}.wav`);
       }
-
-      const noiseSource = ctx.createBufferSource();
-      noiseSource.buffer = noiseBuffer;
-      noiseSource.loop = true;
-
-      // Create filter to shape the noise into nature sounds
-      const filter = ctx.createBiquadFilter();
-
-      if (sound.name === "Rain") {
-        filter.type = "bandpass";
-        filter.frequency.value = sound.frequency || 1000;
-        filter.Q.value = 1;
-      } else if (sound.name === "Ocean") {
-        filter.type = "lowpass";
-        filter.frequency.value = sound.frequency || 400;
-
-        // Add a slow LFO for ocean waves if possible
-        try {
-          const lfo = ctx.createOscillator();
-          lfo.frequency.value = 0.2;
-          const lfoGain = ctx.createGain();
-          lfoGain.gain.value = 50;
-
-          lfo.connect(lfoGain);
-          lfoGain.connect(filter.frequency);
-          lfo.start();
-        } catch (e) {
-          console.warn("Could not create LFO for ocean waves:", e);
-        }
-      } else if (sound.name === "Forest") {
-        filter.type = "bandpass";
-        filter.frequency.value = sound.frequency || 800;
-        filter.Q.value = 0.5;
-      }
-
-      noiseSource.connect(filter);
-      filter.connect(gainNode);
-
-      noiseSource.start();
-
-      noiseSourcesRef.current[sound.name] = noiseSource;
-      filtersRef.current[sound.name] = filter;
+      if (!response || !response?.ok)
+        throw new Error("Failed to fetch sound file");
+      const arrayBuffer = await response.arrayBuffer();
+      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.loop = true;
+      source.connect(gainNode);
+      source.start();
+      noiseSourcesRef.current[sound.name] = source;
     } catch (err) {
-      console.error("Error creating nature sound:", err);
-      toast({
-        title: "Error",
-        description: `Failed to create ${sound.name} sound`,
-        variant: "destructive",
-      });
+      console.error("Error loading nature sound:", err);
+      toast(`Failed to load ${sound.name} sound`);
     }
   };
 
-  // Update volumes when sliders change
   useEffect(() => {
-    if (!audioContextRef.current) return;
-
+    if (!audioContextRef.current || !isPlaying) return;
+    let gainNodeExists = false;
     sounds.forEach((sound) => {
       const gainNode = gainNodesRef.current[sound.name];
-      if (gainNode && activeSound[sound.name]) {
-        gainNode.gain.value = (volumes[sound.type] / 100) * 0.5; // Scale down a bit to avoid clipping
+      if (gainNode) {
+        if (activeSound[sound.name]) {
+          gainNode.gain.value = (volumes[sound.type] / 100) * 0.5;
+        }
+        gainNodeExists = true;
       }
     });
-  }, [volumes, activeSound]);
+    if (!gainNodeExists) {
+      Object.values(gainNodesRef.current).forEach((gain) => {
+        if (gain) {
+          gain.gain.value = 0;
+        }
+      });
 
-  const togglePlay = () => {
+      setIsPlaying(false);
+      toast("No Playing Sound.");
+    }
+  }, [volumes, activeSound, isPlaying]);
+
+  const startPlayback = async () => {
     if (!audioContextRef.current) return;
 
     try {
-      // Resume audio context if it's suspended (browser autoplay policy)
+      // Resume audio context if it's suspended
       if (audioContextRef.current.state === "suspended") {
-        audioContextRef.current.resume().catch((e) => {
-          console.error("Failed to resume audio context:", e);
-          setAudioError("Failed to start audio playback");
-          toast({
-            title: "Error",
-            description: "Failed to start audio playback",
-            variant: "destructive",
-          });
-        });
+        await audioContextRef.current?.resume();
       }
 
-      if (isPlaying) {
-        // Mute all sounds
-        Object.entries(gainNodesRef.current).forEach(([name, gain]) => {
-          if (gain) {
-            gain.gain.value = 0;
+      // Set volumes for active sounds and mute inactive sounds
+      let activeSoundExist = false;
+      sounds.forEach((sound) => {
+        const gainNode = gainNodesRef.current[sound.name];
+        if (gainNode) {
+          if (activeSound[sound.name]) {
+            gainNode.gain.value = (volumes[sound.type] / 100) * 0.5;
+            activeSoundExist=true;
+          } else {
+            gainNode.gain.value = 0;
           }
-        });
-        toast({
-          title: "Playback paused",
-          description: "All sounds have been muted",
-        });
-      } else {
-        // Set volumes for active sounds
-        Object.entries(activeSound).forEach(([name, isActive]) => {
-          if (isActive) {
-            const sound = sounds.find((s) => s.name === name);
-            if (sound && gainNodesRef.current[name]) {
-              gainNodesRef.current[name]!.gain.value =
-                (volumes[sound.type] / 100) * 0.5;
-            }
-          }
-        });
-        toast({
-          title: "Playback started",
-          description: "Your sound mix is now playing",
-        });
-      }
-
-      setIsPlaying(!isPlaying);
-    } catch (err) {
-      console.error("Error toggling playback:", err);
-      setAudioError("Failed to toggle playback");
-      toast({
-        title: "Error",
-        description: "Failed to toggle playback",
-        variant: "destructive",
+        }
       });
+      if(activeSoundExist){
+        setIsPlaying(true);
+        toast( "Your sound mix is now playing");
+
+      }
+    } catch (err) {
+      console.error("Error starting playback:", err);
+      setAudioError("Failed to start playback");
+      toast( "Failed to start playback");
     }
   };
 
-  const toggleSound = (sound: Sound) => {
+  const stopPlayback = () => {
     if (!audioContextRef.current) return;
 
     try {
-      const newActiveSound = {
-        ...activeSound,
-        [sound.name]: !activeSound[sound.name],
-      };
-
-      setActiveSound(newActiveSound);
-
-      // Resume audio context if it's suspended (browser autoplay policy)
-      if (audioContextRef.current.state === "suspended") {
-        audioContextRef.current.resume().catch((e) => {
-          console.error("Failed to resume audio context:", e);
-          setAudioError("Failed to start audio playback");
-          toast({
-            title: "Error",
-            description: "Failed to start audio playback",
-            variant: "destructive",
-          });
-        });
-      }
-
-      const gainNode = gainNodesRef.current[sound.name];
-      if (gainNode) {
-        if (newActiveSound[sound.name] && isPlaying) {
-          gainNode.gain.value = (volumes[sound.type] / 100) * 0.5;
-          toast({
-            title: `${sound.name} activated`,
-            description: `${sound.name} has been added to your mix`,
-          });
-        } else {
-          gainNode.gain.value = 0;
-          if (!newActiveSound[sound.name]) {
-            toast({
-              title: `${sound.name} deactivated`,
-              description: `${sound.name} has been removed from your mix`,
-            });
-          }
+      // Mute all sounds
+      Object.values(gainNodesRef.current).forEach((gain) => {
+        if (gain) {
+          gain.gain.value = 0;
         }
-      }
-    } catch (err) {
-      console.error("Error toggling sound:", err);
-      setAudioError(`Failed to toggle ${sound.name}`);
-      toast({
-        title: "Error",
-        description: `Failed to toggle ${sound.name}`,
-        variant: "destructive",
       });
+
+      setIsPlaying(false);
+      toast("All sounds have been muted");
+    } catch (err) {
+      console.error("Error stopping playback:", err);
+      setAudioError("Failed to stop playback");
+      toast("Failed to stop playback");
     }
   };
 
@@ -463,166 +307,17 @@ export default function SoundMixer() {
       setIsPlaying(false);
       setVolumes({ nature: 50, noise: 30, melody: 20 });
       setActiveSound({});
-      toast({
-        title: "Mixer reset",
-        description: "All settings have been reset to default",
-      });
+      toast( "All settings have been reset to default");
     } catch (err) {
       console.error("Error resetting mixer:", err);
       setAudioError("Failed to reset mixer");
-      toast({
-        title: "Error",
-        description: "Failed to reset mixer",
-        variant: "destructive",
-      });
+      toast( "Failed to reset mixer");
     }
   };
 
-  const handleVolumeChange = (
-    type: "nature" | "noise" | "melody",
-    value: number[]
-  ) => {
-    setVolumes((prev) => ({ ...prev, [type]: value[0] }));
-  };
-
-  // Save current mix
-  const saveMix = () => {
-    if (!newMixName.trim()) {
-      toast({
-        title: "Error",
-        description: "Please enter a name for your mix",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Check if any sounds are active
-    const hasActiveSounds = Object.values(activeSound).some(
-      (isActive) => isActive
-    );
-    if (!hasActiveSounds) {
-      toast({
-        title: "Error",
-        description: "Please select at least one sound before saving",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      const newMix: SoundMix = {
-        id: `mix-${Date.now()}`,
-        name: newMixName.trim(),
-        activeSound: { ...activeSound },
-        volumes: { ...volumes },
-        createdAt: Date.now(),
-      };
-
-      const updatedMixes = [...savedMixes, newMix];
-      setSavedMixes(updatedMixes);
-
-      // Save to localStorage
-      localStorage.setItem("soundMixes", JSON.stringify(updatedMixes));
-
-      // Reset form and close dialog
-      setNewMixName("");
-      setSaveDialogOpen(false);
-      toast({
-        title: "Mix saved",
-        description: `"${newMixName.trim()}" has been saved successfully`,
-      });
-    } catch (err) {
-      console.error("Error saving mix:", err);
-      toast({
-        title: "Error",
-        description: "Failed to save mix",
-        variant: "destructive",
-      });
-    }
-  };
-
-  // Load a saved mix
-  const loadMix = (mix: SoundMix) => {
-    try {
-      // Stop all current sounds
-      if (isPlaying) {
-        Object.values(gainNodesRef.current).forEach((gain) => {
-          if (gain) {
-            gain.gain.value = 0;
-          }
-        });
-        setIsPlaying(false);
-      }
-
-      // Apply the mix settings
-      setVolumes({ ...mix.volumes });
-      setActiveSound({ ...mix.activeSound });
-
-      // Close the dialog
-      setLoadDialogOpen(false);
-      toast({
-        title: "Mix loaded",
-        description: `"${mix.name}" has been loaded successfully`,
-      });
-    } catch (err) {
-      console.error("Error loading mix:", err);
-      setAudioError("Failed to load mix");
-      toast({
-        title: "Error",
-        description: "Failed to load mix",
-        variant: "destructive",
-      });
-    }
-  };
-
-  // Delete a saved mix
-  const deleteMix = (mixId: string) => {
-    try {
-      const mixToDelete = savedMixes.find((mix) => mix.id === mixId);
-      const updatedMixes = savedMixes.filter((mix) => mix.id !== mixId);
-      setSavedMixes(updatedMixes);
-
-      // Update localStorage
-      localStorage.setItem("soundMixes", JSON.stringify(updatedMixes));
-
-      if (mixToDelete) {
-        toast({
-          title: "Mix deleted",
-          description: `"${mixToDelete.name}" has been deleted`,
-        });
-      }
-    } catch (err) {
-      console.error("Error deleting mix:", err);
-      toast({
-        title: "Error",
-        description: "Failed to delete mix",
-        variant: "destructive",
-      });
-    }
-  };
-
-  // Format date for display
-  const formatDate = (timestamp: number) => {
-    return new Date(timestamp).toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  };
-
-   // Show loading spinner when audio is initializing
-   if (!audioReady && !audioError) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 p-4 md:p-8 flex items-center justify-center">
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-8 shadow-md flex flex-col items-center">
-          <div className="animate-spin mb-4">
-            <LoaderCircle className="h-10 w-10 text-primary" />
-          </div>
-          <h2 className="text-xl font-semibold mb-2">Initializing Sound Mixer</h2>
-          <p className="text-gray-500 dark:text-gray-400 text-center">Setting up audio system, please wait...</p>
-        </div>
-      </div>
-    )
+  // Show loading spinner when audio is initializing
+  if (!audioReady && !audioError) {
+    return <LoaderSpinner />;
   }
 
   return (
@@ -631,7 +326,7 @@ export default function SoundMixer() {
         <CardContent className="p-6">
           <div className="flex flex-col space-y-8">
             <div className="text-center">
-              <div className="flex justify-between items-center mb-4">
+              <div className="flex justify-between items-start mb-4">
                 <div className="w-10" /> {/* Empty div for balance */}
                 <h1 className="text-3xl font-bold">Focus Sound Mixer</h1>
                 <ThemeToggle />
@@ -647,377 +342,84 @@ export default function SoundMixer() {
               )}
             </div>
 
-            <div className="flex flex-wrap justify-center gap-2 md:gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4  gap-2 sm:gap-4">
               <Button
-                onClick={togglePlay}
-                size="lg"
+                onClick={isPlaying ? stopPlayback : startPlayback}
+                className="flex gap-2"
                 disabled={!audioReady || !!audioError}
               >
                 {isPlaying ? (
-                  <Pause className="mr-2 h-5 w-5" />
+                  <Pause className="hidden sm:block h-5 w-5" />
                 ) : (
-                  <Play className="mr-2 h-5 w-5" />
+                  <Play className="hidden sm:block h-5 w-5" />
                 )}
                 {isPlaying ? "Pause" : "Play"}
               </Button>
 
-              <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    disabled={!audioReady || !!audioError}
-                  >
-                    <Save className="mr-2 h-5 w-5" />
-                    Save Mix
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Save Current Mix</DialogTitle>
-                  </DialogHeader>
-                  <div className="py-4">
-                    <Input
-                      placeholder="Enter a name for your mix"
-                      value={newMixName}
-                      onChange={(e) => setNewMixName(e.target.value)}
-                      className="mb-4"
-                    />
-                    <div className="text-sm text-gray-500">
-                      This will save your current sound selection and volume
-                      settings.
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button
-                      variant="outline"
-                      onClick={() => setSaveDialogOpen(false)}
-                    >
-                      Cancel
-                    </Button>
-                    <Button onClick={saveMix}>Save Mix</Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
+              {/* SAVE MIX */}
+              <SaveMixDialog
+                saveDialogOpen={saveDialogOpen}
+                setSaveDialogOpen={setSaveDialogOpen}
+                audioReady={audioReady}
+                audioError={audioError}
+                newMixName={newMixName}
+                activeSound={activeSound}
+                volumes={volumes}
+                savedMixes={savedMixes}
+                setSavedMixes={setSavedMixes}
+                setNewMixName={setNewMixName}
+              />
 
-              <Dialog open={loadDialogOpen} onOpenChange={setLoadDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    disabled={!audioReady || !!audioError}
-                  >
-                    <BookmarkPlus className="mr-2 h-5 w-5" />
-                    Load Mix
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>Load Sound Mix</DialogTitle>
-                  </DialogHeader>
-                  <Tabs defaultValue="saved">
-                    <TabsList className="grid w-full grid-cols-2">
-                      <TabsTrigger value="saved">Your Mixes</TabsTrigger>
-                      <TabsTrigger value="presets">Presets</TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="saved" className="mt-4">
-                      {savedMixes.length > 0 ? (
-                        <ScrollArea className="h-[300px]">
-                          <div className="space-y-2">
-                            {savedMixes.map((mix) => (
-                              <div
-                                key={mix.id}
-                                className="flex items-center justify-between p-3 rounded-md border "
-                              >
-                                <div>
-                                  <h3 className="font-medium">{mix.name}</h3>
-                                  <p className="text-xs text-gray-500">
-                                    {formatDate(mix.createdAt)}
-                                  </p>
-                                </div>
-                                <div className="flex gap-2">
-                                  <TooltipProvider>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          onClick={() => loadMix(mix)}
-                                        >
-                                          <Check className="h-4 w-4" />
-                                        </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>
-                                        <p>Load this mix</p>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-
-                                  <TooltipProvider>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          onClick={() => deleteMix(mix.id)}
-                                        >
-                                          <Trash2 className="h-4 w-4 text-red-500" />
-                                        </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>
-                                        <p>Delete this mix</p>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </ScrollArea>
-                      ) : (
-                        <div className="text-center py-8 text-gray-500">
-                          <p>You haven't saved any mixes yet.</p>
-                          <p className="text-sm mt-2">
-                            Create your perfect sound blend and save it for
-                            later!
-                          </p>
-                        </div>
-                      )}
-                    </TabsContent>
-                    <TabsContent value="presets" className="mt-4">
-                      <ScrollArea className="h-[300px]">
-                        <div className="space-y-2">
-                          {presetMixes.map((mix) => (
-                            <div
-                              key={mix.id}
-                              className="flex items-center justify-between p-3 rounded-md border "
-                            >
-                              <div>
-                                <h3 className="font-medium dark:text-white">{mix.name}</h3>
-                                <div className="flex flex-wrap gap-1 mt-1">
-                                  {Object.entries(mix.activeSound)
-                                    .filter(([_, isActive]) => isActive)
-                                    .map(([name]) => {
-                                      const sound = sounds.find(
-                                        (s) => s.name === name
-                                      );
-                                      return sound ? (
-                                        <span
-                                          key={name}
-                                          className="text-xs px-1.5 py-0.5 rounded-full dark:bg-gray-900"
-                                        >
-                                          <span className="mr-1">
-                                            {sound.icon}
-                                          </span>{" "}
-                                          {name}
-                                        </span>
-                                      ) : null;
-                                    })}
-                                </div>
-                              </div>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => loadMix(mix)}
-                              >
-                                Load
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                      </ScrollArea>
-                    </TabsContent>
-                  </Tabs>
-                </DialogContent>
-              </Dialog>
+              {/* LOAD MIX */}
+              <LoadMixDialog
+                setVolumes={setVolumes}
+                setActiveSound={setActiveSound}
+                loadDialogOpen={loadDialogOpen}
+                setLoadDialogOpen={setLoadDialogOpen}
+                audioReady={audioReady}
+                audioError={audioError}
+                savedMixes={savedMixes}
+                setSavedMixes={setSavedMixes}
+                isPlaying={isPlaying}
+                setIsPlaying={setIsPlaying}
+                gainNodesRef={gainNodesRef}
+                setAudioError={setAudioError}
+              />
 
               <Button
                 onClick={resetMixer}
                 variant="outline"
-                size="lg"
+                className="flex gap-2"
                 disabled={!audioReady || !!audioError}
               >
-                <RefreshCw className="mr-2 h-5 w-5" />
+                <RefreshCw className="hidden sm:block h-5 w-5" />
                 Reset
               </Button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              {/* Nature Sounds */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-semibold">Nature</h2>
-                  <div className="flex items-center">
-                    {volumes.nature === 0 ? (
-                      <VolumeX className="h-5 w-5 text-gray-400" />
-                    ) : (
-                      <Volume2 className="h-5 w-5 text-primary" />
-                    )}
-                    <span className="ml-2 text-sm font-medium">
-                      {volumes.nature}%
-                    </span>
-                  </div>
-                </div>
-
-                <Slider
-                  value={[volumes.nature]}
-                  max={100}
-                  step={1}
-                  onValueChange={(value) => handleVolumeChange("nature", value)}
-                  className="my-4"
-                  disabled={!audioReady || !!audioError}
+              {soundGroups.map((group) => (
+                <SoundGroup
+                  key={group}
+                  volumes={volumes}
+                  setVolumes={setVolumes}
+                  audioReady={audioReady}
+                  audioError={audioError}
+                  setAudioError={setAudioError}
+                  activeSound={activeSound}
+                  setActiveSound={setActiveSound}
+                  audioContextRef={audioContextRef}
+                  gainNodesRef={gainNodesRef}
+                  isPlaying={isPlaying}
+                  groupName={group}
                 />
-
-                <div className="grid grid-cols-3 gap-2">
-                  {sounds
-                    .filter((sound) => sound.type === "nature")
-                    .map((sound) => (
-                      <Button
-                        key={sound.name}
-                        variant={
-                          activeSound[sound.name] ? "default" : "outline"
-                        }
-                        className={`h-16 ${
-                          activeSound[sound.name] ? "dark:bg-white bg-gray-900" : ""
-                        }`}
-                        onClick={() => toggleSound(sound)}
-                        disabled={!audioReady || !!audioError}
-                      >
-                        <div className="flex flex-col items-center">
-                          <span className="text-xl">{sound.icon}</span>
-                          <span className="text-xs mt-1">{sound.name}</span>
-                        </div>
-                      </Button>
-                    ))}
-                </div>
-              </div>
-
-              {/* White Noise */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-semibold">Noise</h2>
-                  <div className="flex items-center">
-                    {volumes.noise === 0 ? (
-                      <VolumeX className="h-5 w-5 text-gray-400" />
-                    ) : (
-                      <Volume2 className="h-5 w-5 text-primary" />
-                    )}
-                    <span className="ml-2 text-sm font-medium">
-                      {volumes.noise}%
-                    </span>
-                  </div>
-                </div>
-
-                <Slider
-                  value={[volumes.noise]}
-                  max={100}
-                  step={1}
-                  onValueChange={(value) => handleVolumeChange("noise", value)}
-                  className="my-4"
-                  disabled={!audioReady || !!audioError}
-                />
-
-                <div className="grid grid-cols-3 gap-2">
-                  {sounds
-                    .filter((sound) => sound.type === "noise")
-                    .map((sound) => (
-                      <Button
-                        key={sound.name}
-                        variant={
-                          activeSound[sound.name] ? "default" : "outline"
-                        }
-                        className={`h-16 ${
-                          activeSound[sound.name] ? "dark:bg-white bg-gray-900" : ""
-                        }`}
-                        onClick={() => toggleSound(sound)}
-                        disabled={!audioReady || !!audioError}
-                      >
-                        <div className="flex flex-col items-center">
-                          <span className="text-xl">{sound.icon}</span>
-                          <span className="text-xs mt-1">{sound.name}</span>
-                        </div>
-                      </Button>
-                    ))}
-                </div>
-              </div>
-
-              {/* Melody */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-semibold">Melody</h2>
-                  <div className="flex items-center">
-                    {volumes.melody === 0 ? (
-                      <VolumeX className="h-5 w-5 text-gray-400" />
-                    ) : (
-                      <Volume2 className="h-5 w-5 text-primary" />
-                    )}
-                    <span className="ml-2 text-sm font-medium">
-                      {volumes.melody}%
-                    </span>
-                  </div>
-                </div>
-
-                <Slider
-                  value={[volumes.melody]}
-                  max={100}
-                  step={1}
-                  onValueChange={(value) => handleVolumeChange("melody", value)}
-                  className="my-4"
-                  disabled={!audioReady || !!audioError}
-                />
-
-                <div className="grid grid-cols-3 gap-2">
-                  {sounds
-                    .filter((sound) => sound.type === "melody")
-                    .map((sound) => (
-                      <Button
-                        key={sound.name}
-                        variant={
-                          activeSound[sound.name] ? "default" : "outline"
-                        }
-                        className={`h-16 ${
-                          activeSound[sound.name] ? "dark:bg-white bg-gray-900" : ""
-                        }`}
-                        onClick={() => toggleSound(sound)}
-                        disabled={!audioReady || !!audioError}
-                      >
-                        <div className="flex flex-col items-center">
-                          <span className="text-xl">{sound.icon}</span>
-                          <span className="text-xs mt-1">{sound.name}</span>
-                        </div>
-                      </Button>
-                    ))}
-                </div>
-              </div>
+              ))}
             </div>
 
-            <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg">
-              <h3 className="font-medium mb-2">Currently Playing:</h3>
-              <div className="flex flex-wrap gap-2">
-                {Object.entries(activeSound)
-                  .filter(([_, isActive]) => isActive)
-                  .map(([name]) => {
-                    const sound = sounds.find((s) => s.name === name);
-                    return sound ? (
-                      <span
-                        key={name}
-                        className={`dark:bg-gray-600 bg-gray-900 text-white px-3 py-1 rounded-full text-sm flex items-center`}
-                      >
-                        <span className="mr-1">{sound.icon}</span> {name}
-                      </span>
-                    ) : null;
-                  })}
-                {Object.values(activeSound).filter(Boolean).length === 0 && (
-                  <span className="text-gray-500 dark:text-gray-400 italic">
-                    No sounds selected
-                  </span>
-                )}
-              </div>
-            </div>
+            <DisplayCurrentPlayingSounds activeSound={activeSound} />
           </div>
         </CardContent>
       </Card>
-      <Toaster />
     </div>
   );
 }
